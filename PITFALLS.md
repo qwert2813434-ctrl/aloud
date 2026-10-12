@@ -53,3 +53,19 @@ for pid in $(lsof -ti tcp:8765); do kill $pid; done   # 用埠殺
 Edge 語音端點每 7～20 句會有一句接了連線卻 9–20 秒不回音檔，畫面停在「合成中」。
 另外它有一個 IPv6 位址整個連不上，走預設每句白耗 0.25–0.45 秒握手。
 → **強制 IPv4、連線與收包各設 3 秒逾時、最多重試 3 次**。實測中位數 1.07s→0.72s、最慢 10.7s→1.1s。
+
+### 10. Edge 語音整批 403：微軟換了主機（2026-10-12）
+
+那天起 `speech.platform.bing.com` 的合成一律在 WebSocket 握手回 `403 Invalid response status`，
+`edge-tts` 7.2.8（當時最新）全世界一起壞。表面錯誤常常是 `RuntimeError: Session is closed`，看不出是 403。
+不是時鐘、不是假冒的 Edge 版號（改到 150 一樣 403）。
+→ 改走 Edge 155 用的新主機，舊的 client token 改當 `Ocp-Apim-Subscription-Key` 帶；聲音清單仍在舊主機。
+上游修正在 edge-tts PR #491，套件出新版前在你的伺服器 import 之後覆寫：
+
+```python
+import edge_tts, edge_tts.communicate
+edge_tts.communicate.WSS_URL = ("wss://api.msedgeservices.com/tts/cognitiveservices/websocket/v1"
+                                "?Ocp-Apim-Subscription-Key=" + edge_tts.constants.TRUSTED_CLIENT_TOKEN)
+```
+
+教訓同第 8 條：把「合成失敗」的真正原因（狀態碼）顯示出來，別只顯示最後一層例外。
